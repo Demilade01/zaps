@@ -153,8 +153,6 @@ ZAPS relies on Stellar Anchors for:
 - **Anchors:** SEP-6 / SEP-24 / SEP-31
 - **Frontend:** React / React Native
 - **Backend:** Node.js
-- **POS:** Web + Mobile SDKs
-- **Storage:** Encrypted local storage
 
 ---
 
