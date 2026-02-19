@@ -1,35 +1,21 @@
-import { Request, Response } from 'express';
-import auditService from '../services/audit.service';
-import prisma from '../utils/prisma';
+import { Request, Response, NextFunction } from 'express';
+import metricsService from '../services/metrics.service';
+import { ApiError } from '../middleware/error.middleware';
 
-class AdminController {
-    async getDashboardStats(req: Request, res: Response) {
-        // Port logic from admin.rs
-        const userCount = await prisma.user.count();
-        const merchantCount = await prisma.merchant.count();
-        const paymentVolume = await prisma.payment.aggregate({
-            _sum: { sendAmount: true },
-        });
-
-        res.json({
-            users: userCount,
-            merchants: merchantCount,
-            totalVolume: paymentVolume._sum.sendAmount?.toString() || '0',
-        });
+export const getDashboardStats = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const stats = await metricsService.getDashboardStats();
+        res.status(200).json(stats);
+    } catch (error) {
+        next(error);
     }
+};
 
-    async getAuditLogs(req: Request, res: Response) {
-        const logs = await auditService.getLogs();
-        res.json(logs);
+export const getSystemHealth = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const health = await metricsService.getSystemHealth();
+        res.status(200).json(health);
+    } catch (error) {
+        next(error);
     }
-
-    async getSystemHealth(req: Request, res: Response) {
-        res.json({
-            status: 'UP',
-            uptime: process.uptime(),
-            memory: process.memoryUsage(),
-        });
-    }
-}
-
-export default new AdminController();
+};

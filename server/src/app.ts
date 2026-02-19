@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import routes from './routes';
 import { errorHandler } from './middleware/error.middleware';
+import { rateLimit } from './middleware/rate-limit.middleware';
 
 const app: Express = express();
 
@@ -12,6 +13,20 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
+import metricsService from './services/metrics.service';
+
+// ... (existing middleware)
+app.use(rateLimit(100));
+
+// Metrics tracking middleware
+app.use((req: Request, res: Response, next: NextFunction) => {
+    const originalSend = res.send;
+    res.send = function (body) {
+        metricsService.recordRequest(res.statusCode);
+        return originalSend.apply(res, arguments as any);
+    };
+    next();
+});
 
 // Routes
 app.use('/api/v1', routes);

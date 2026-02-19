@@ -1,20 +1,69 @@
 import prisma from '../utils/prisma';
+import logger from '../utils/logger';
 
 class MetricsService {
-    // Skeletal Prometheus metrics export logic
-    // Port logic from metrics_service.rs
+    private startTime: number = Date.now();
+    private requestCount: number = 0;
+    private errorCount: number = 0;
 
-    async getMetricsJson() {
+    recordRequest(status: number) {
+        this.requestCount++;
+        if (status >= 400) {
+            this.errorCount++;
+        }
+    }
+
+    getUptime(): number {
+        return Math.floor((Date.now() - this.startTime) / 1000);
+    }
+
+    getErrorRate(): number {
+        if (this.requestCount === 0) return 0;
+        return (this.errorCount / this.requestCount) * 100;
+    }
+
+    async getDashboardStats() {
+        const [
+            totalUsers,
+            totalPayments,
+            totalTransfers,
+            totalWithdrawals,
+            activeMerchants
+        ] = await Promise.all([
+            prisma.user.count(),
+            prisma.payment.count(),
+            prisma.transfer.count(),
+            prisma.withdrawal.count(),
+            prisma.merchant.count(),
+        ]);
+
         return {
-            active_users: await prisma.user.count(),
-            total_payments: await prisma.payment.count(),
-            system_uptime: process.uptime(),
+            totalUsers,
+            totalPayments,
+            totalTransfers,
+            totalWithdrawals,
+            activeMerchants,
+            uptime: this.getUptime(),
+            errorRate: this.getErrorRate(),
+            requestCount: this.requestCount
         };
     }
 
-    async getPrometheusMetrics() {
-        // Logic to format metrics for Prometheus
-        return '# HELP system_uptime System uptime in seconds\n# TYPE system_uptime gauge\nsystem_uptime ' + process.uptime();
+    async getSystemHealth() {
+        try {
+            await prisma.$queryRaw`SELECT 1`;
+            return {
+                status: 'healthy',
+                database: 'connected',
+                timestamp: new Date().toISOString()
+            };
+        } catch (err) {
+            return {
+                status: 'degraded',
+                database: 'disconnected',
+                timestamp: new Date().toISOString()
+            };
+        }
     }
 }
 

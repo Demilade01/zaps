@@ -1,6 +1,7 @@
 import sorobanService from './soroban.service';
 import prisma from '../utils/prisma';
 import { PaymentStatus } from '@prisma/client';
+import logger from '../utils/logger';
 
 class EventBridgeService {
     private isRunning: boolean = false;
@@ -9,15 +10,15 @@ class EventBridgeService {
     async start() {
         if (this.isRunning) return;
         this.isRunning = true;
-        console.log('Event Bridge started...');
+        logger.info('Event Bridge started...');
 
         // Initialize lastLedger to latest if 0
         if (this.lastLedger === 0) {
             try {
                 this.lastLedger = await sorobanService.getLatestLedger();
-                console.log(`Event Bridge initialized at ledger ${this.lastLedger}`);
-            } catch (err) {
-                console.error('Failed to initialize Event Bridge ledger:', err);
+                logger.info(`Event Bridge initialized at ledger ${this.lastLedger}`);
+            } catch (err: any) {
+                logger.error('Failed to initialize Event Bridge ledger:', { error: err.message });
                 this.lastLedger = 1; // Fallback
             }
         }
@@ -28,35 +29,43 @@ class EventBridgeService {
     private async poll() {
         while (this.isRunning) {
             try {
-                // Port logic from indexer_service.rs
-                // Get events since lastLedger
-                const events = await sorobanService.getEvents(this.lastLedger);
+                const eventsResponse = await sorobanService.getEvents(this.lastLedger);
+                const events = (eventsResponse as any).events || [];
 
-                for (const event of events.events) {
+                for (const event of events) {
                     await this.processEvent(event);
                 }
 
-                // Update lastLedger (this should be persisted to DB in real implementation)
-                // this.lastLedger = ...;
+                // Update lastLedger if events were found
+                if (events.length > 0) {
+                    const latestEventLedger = Math.max(...events.map((e: any) => parseInt(e.ledger, 10)));
+                    this.lastLedger = latestEventLedger + 1;
+                }
 
                 await new Promise(resolve => setTimeout(resolve, 5000)); // Poll every 5s
-            } catch (err) {
-                console.error('Event Bridge polling error:', err);
+            } catch (err: any) {
+                logger.error('Event Bridge polling error:', { error: err.message });
                 await new Promise(resolve => setTimeout(resolve, 10000));
             }
         }
     }
 
     private async processEvent(event: any) {
-        // Port logic from indexer_service.rs
-        // Example: Handle PAY_DONE event
-        if (event.type === 'contract' && event.name === 'PAY_DONE') {
-            const paymentId = event.data.paymentId;
-            await prisma.payment.update({
-                where: { id: paymentId },
-                data: { status: PaymentStatus.COMPLETED },
-            });
-            console.log(`Payment ${paymentId} completed on-chain`);
+        try {
+            // Port logic from indexer_service.rs
+            // Example: Handle PAY_DONE event (this depends on the contract event schema)
+            if (event.type === 'contract' && event.topic?.[0] === 'PAY_DONE') {
+                const paymentId = event.value?.paymentId;
+                if (!paymentId) return;
+
+                await prisma.payment.update({
+                    where: { id: paymentId },
+                    data: { status: PaymentStatus.COMPLETED },
+                });
+                logger.info(`Payment ${paymentId} completed on-chain via Event Bridge`);
+            }
+        } catch (err: any) {
+            logger.error('Error processing event:', { error: err.message, event });
         }
     }
 

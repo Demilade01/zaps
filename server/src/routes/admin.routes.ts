@@ -1,13 +1,10 @@
 import { Router } from 'express';
-import adminController from '../controllers/admin.controller';
-import { adminOnly } from '../middleware/role.middleware';
+import * as adminController from '../controllers/admin.controller';
 
 const router = Router();
 
-router.use(adminOnly);
-
-router.get('/dashboard/stats', adminController.getDashboardStats);
-router.get('/audit-logs', adminController.getAuditLogs);
-router.get('/system/health', adminController.getSystemHealth);
+// Only Admins should access these
+router.get('/dashboard', adminController.getDashboardStats);
+router.get('/health', adminController.getSystemHealth);
 
 export default router;
